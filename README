@@ -1,0 +1,51 @@
+# NHS DM01 — Basic Machine Learning Workflow
+
+## Project Overview
+
+This project demonstrates a basic machine learning workflow using NHS Diagnostics Waiting Times and Activity (DM01) data.
+
+The aim is to automate data validation, model training and testing using Python and GitHub Actions.
+
+## Workflow
+
+1. **Data Loading** — Import historical DM01 CSV files.
+2. **Data Validation** — Check missing values, columns and data quality.
+3. **Data Preparation** — Prepare features for modelling.
+4. **Model Training** — Train a regression model.
+5. **Model Evaluation** — Calculate MAE, RMSE and R².
+6. **Automated Testing** — Run tests using pytest.
+7. **GitHub Actions** — Automatically execute the workflow when code is pushed.
+
+## Technologies
+
+- Python
+- Pandas and NumPy
+- Scikit-learn
+- pytest
+- GitHub Actions
+
+## Project Structure
+
+```text
+WorkFlow/
+├── data/
+│   └── raw/
+├── src/
+│   ├── prepare_data.py
+│   └── train_model.py
+├── tests/
+│   └── test_model.py
+├── .github/
+│   └── workflows/
+│       └── python-ci.yml
+├── requirements.txt
+└── README.md
+```
+
+## Objective
+
+Demonstrate how GitHub Actions can automatically validate data, run machine learning code and execute tests to support a reliable and reproducible development workflow.
+
+## Status
+
+In development — basic workflow setup.
