@@ -55,9 +55,9 @@ jobs:
           PYTHONPATH: .
         run: python -m pytest tests/ -v
 
-  # JOB 3 - MODEL TRAINING
+  # JOB 3 - MODEL TRAINING AND ARTIFACTS
   train-model:
-    name: 3 - Train ML Model
+    name: 3 - Train and Evaluate ML Model
     runs-on: ubuntu-latest
     needs: run-tests
 
@@ -74,14 +74,36 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Train model
+      - name: Train model and generate artifacts
         run: python src/train_model.py
 
-      # NEW - SAVE MODEL AND RESULTS
-      - name: Upload model artifacts
+      - name: Verify required artifacts
+        run: |
+          test -s artifacts/dm01_processed_data.csv
+          test -s artifacts/model_results.csv
+          test -s artifacts/dm01_model.joblib
+          echo "All required artifacts generated successfully"
+
+      - name: Upload data artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dm01-model-results
-          path: artifacts/
+          name: dm01-processed-data
+          path: artifacts/dm01_processed_data.csv
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload evaluation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dm01-model-evaluation
+          path: artifacts/model_results.csv
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: dm01-trained-model
+          path: artifacts/dm01_model.joblib
           if-no-files-found: error
           retention-days: 30
