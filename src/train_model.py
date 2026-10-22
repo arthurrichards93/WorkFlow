@@ -6,7 +6,11 @@ import numpy as np
 import pandas as pd
 
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+)
 
 
 DATA_DIR = Path("raw")
@@ -39,8 +43,12 @@ def load_data():
 
         df = pd.read_csv(
             file,
-            usecols=["Period", "Provider Org Code",
-                     "Diagnostic Tests", "Total WL"] + BANDS,
+            usecols=[
+                "Period",
+                "Provider Org Code",
+                "Diagnostic Tests",
+                "Total WL",
+            ] + BANDS,
             low_memory=False,
         )
 
@@ -55,7 +63,9 @@ def load_data():
         )
 
         for col in ["Total WL"] + BANDS:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = pd.to_numeric(
+                df[col], errors="coerce"
+            )
 
         df = df.dropna(
             subset=KEYS + ["Total WL"] + BANDS
@@ -74,7 +84,7 @@ def load_data():
 
     data = pd.concat(frames, ignore_index=True)
 
-    # Combine any duplicate month/provider/test records
+    # Combine duplicate month/provider/test records
     data = data.groupby(
         KEYS, as_index=False
     )[["Total_WL", "Over_6"]].sum()
@@ -88,6 +98,8 @@ def load_data():
     data["Pct_Over_6"] = (
         100 * data["Over_6"] / data["Total_WL"]
     )
+
+    print(f"Loaded {len(data):,} aggregated records")
 
     return data
 
@@ -112,16 +124,60 @@ def prepare_features(data):
         previous_value.where(consecutive)
     )
 
-    return data.dropna(
+    data = data.dropna(
         subset=["Previous_Month_Pct"]
     ).copy()
 
+    print(f"Prepared {len(data):,} modelling records")
+
+    return data
+
+
+def save_data_artifact(data):
+    """Save cleaned and feature-engineered DM01 data."""
+
+    OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_file = (
+        OUTPUT_DIR / "dm01_processed_data.csv"
+    )
+
+    data.to_csv(
+        output_file,
+        index=False,
+    )
+
+    print("\nDATA ARTIFACT CREATED")
+    print(f"File: {output_file}")
+    print(f"Rows: {len(data):,}")
+    print(f"Columns: {len(data.columns)}")
+
 
 def main():
-    print("NHS DM01 MODEL TRAINING")
+    print("=" * 60)
+    print("NHS DM01 MACHINE LEARNING PIPELINE")
+    print("=" * 60)
+
+    # STEP 1 - LOAD DATA
+    print("\nSTEP 1: Loading DM01 datasets")
 
     data = load_data()
+
+    # STEP 2 - PREPARE FEATURES
+    print("\nSTEP 2: Preparing modelling features")
+
     data = prepare_features(data)
+
+    # STEP 3 - SAVE DATA ARTIFACT
+    print("\nSTEP 3: Saving processed data")
+
+    save_data_artifact(data)
+
+    # STEP 4 - TRAIN / TEST SPLIT
+    print("\nSTEP 4: Creating time-based split")
 
     months = sorted(data["Month"].unique())
 
@@ -130,14 +186,15 @@ def main():
             "At least two target months are required"
         )
 
-    # Time-based split: final month is held out
     test_month = months[-1]
 
     train = data[data["Month"] < test_month]
     test = data[data["Month"] == test_month]
 
     if train.empty or test.empty:
-        raise ValueError("Training or test data is empty")
+        raise ValueError(
+            "Training or test data is empty"
+        )
 
     features = ["Previous_Month_Pct"]
 
@@ -147,41 +204,64 @@ def main():
     X_test = test[features]
     y_test = test["Pct_Over_6"]
 
+    print(f"Training records: {len(train):,}")
+    print(f"Testing records: {len(test):,}")
+    print(
+        f"Test month: "
+        f"{pd.Timestamp(test_month):%B %Y}"
+    )
+
+    # STEP 5 - TRAIN MODEL
+    print("\nSTEP 5: Training Linear Regression")
+
     model = LinearRegression()
     model.fit(X_train, y_train)
 
     predictions = model.predict(X_test)
 
-    mae = mean_absolute_error(y_test, predictions)
+    # STEP 6 - MODEL EVALUATION
+    print("\nSTEP 6: Evaluating model")
+
+    mae = mean_absolute_error(
+        y_test, predictions
+    )
+
     rmse = np.sqrt(
         mean_squared_error(y_test, predictions)
     )
-    r2 = r2_score(y_test, predictions)
 
-    # Compare against previous-month baseline
+    r2 = r2_score(
+        y_test, predictions
+    )
+
+    # Naive previous-month benchmark
     baseline = test["Previous_Month_Pct"]
+
     baseline_mae = mean_absolute_error(
         y_test, baseline
     )
 
-    print("\nMODEL RESULTS")
-    print(f"Training records: {len(train):,}")
-    print(f"Testing records: {len(test):,}")
-    print(f"Test month: {pd.Timestamp(test_month):%B %Y}")
+    baseline_rmse = np.sqrt(
+        mean_squared_error(y_test, baseline)
+    )
+
+    baseline_r2 = r2_score(
+        y_test, baseline
+    )
+
+    print("\nMODEL COMPARISON")
+    print("-" * 45)
+
     print(f"Linear Regression MAE: {mae:.4f}")
     print(f"Linear Regression RMSE: {rmse:.4f}")
     print(f"Linear Regression R2: {r2:.4f}")
+
     print(f"Naive Baseline MAE: {baseline_mae:.4f}")
+    print(f"Naive Baseline RMSE: {baseline_rmse:.4f}")
+    print(f"Naive Baseline R2: {baseline_r2:.4f}")
 
-    OUTPUT_DIR.mkdir(exist_ok=True)
-
-    joblib.dump(
-        {
-            "model": model,
-            "features": features,
-        },
-        OUTPUT_DIR / "dm01_model.joblib",
-    )
+    # STEP 7 - SAVE EVALUATION ARTIFACT
+    print("\nSTEP 7: Saving evaluation results")
 
     results = pd.DataFrame([
         {
@@ -193,19 +273,44 @@ def main():
         {
             "Model": "Naive Baseline",
             "MAE": baseline_mae,
-            "RMSE": np.sqrt(
-                mean_squared_error(y_test, baseline)
-            ),
-            "R2": r2_score(y_test, baseline),
+            "RMSE": baseline_rmse,
+            "R2": baseline_r2,
         },
     ])
 
+    results_file = (
+        OUTPUT_DIR / "model_results.csv"
+    )
+
     results.to_csv(
-        OUTPUT_DIR / "model_results.csv",
+        results_file,
         index=False,
     )
 
-    print("\nModel and results saved successfully")
+    print("\nEVALUATION ARTIFACT CREATED")
+    print(results.to_string(index=False))
+    print(f"File: {results_file}")
+
+    # STEP 8 - SAVE TRAINED MODEL
+    print("\nSTEP 8: Saving trained model")
+
+    model_file = (
+        OUTPUT_DIR / "dm01_model.joblib"
+    )
+
+    joblib.dump(
+        {
+            "model": model,
+            "features": features,
+        },
+        model_file,
+    )
+
+    print(f"Model saved: {model_file}")
+
+    print("\n" + "=" * 60)
+    print("PIPELINE COMPLETED SUCCESSFULLY")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
