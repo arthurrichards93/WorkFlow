@@ -10,48 +10,87 @@ on:
 
 jobs:
   coefficient-stability:
+    name: Test and Track Regression Stability
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
+    env:
+      PYTHONPATH: .:src
+      MLFLOW_TRACKING_URI: ./mlruns
+
     steps:
-      # Step 1 - Checkout repository
+      # STEP 1 - Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2 - Set up Python
+      # STEP 2 - Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # Step 3 - Install dependencies
+      # STEP 3 - Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install mlflow pytest
 
-      # Step 4 - Run automated tests
+      # STEP 4 - Run existing automated tests
       - name: Run automated tests
-        env:
-          PYTHONPATH: .:src
         run: |
           python -m pytest -v
 
-      # Step 5 - Run coefficient stability experiments
-      - name: Run coefficient stability experiments
-        env:
-          PYTHONPATH: .:src
-          MLFLOW_TRACKING_URI: ./mlruns
+      # STEP 5 - Check experiment script
+      - name: Check coefficient stability module
         run: |
-          python -m model_training.coefficient_stability
+          test -f src/model_training/coefficient_stability.py
+          python -m model_training.coefficient_stability --help
 
-      # Step 6 - Upload MLflow results
+      # STEP 6 - Run cross-validation experiments
+      - name: Run coefficient stability experiments
+        run: |
+          python -m model_training.coefficient_stability \
+            --data "${DM01_DATA_PATH}" \
+            --target "${DM01_TARGET}"
+        env:
+          DM01_DATA_PATH: ${{ vars.DM01_DATA_PATH }}
+          DM01_TARGET: ${{ vars.DM01_TARGET }}
+
+      # STEP 7 - Verify results were generated
+      - name: Verify experiment outputs
+        run: |
+          test -d mlruns || {
+            echo "ERROR: MLflow tracking directory missing"
+            exit 1
+          }
+
+          for method in 5_Fold Repeated_5_Fold Bootstrap_100
+          do
+            test -s "stability_outputs/${method}_coefficients.csv" || exit 1
+            test -s "stability_outputs/${method}_metrics.csv" || exit 1
+            test -s "stability_outputs/${method}_summary.csv" || exit 1
+          done
+
+          test -s stability_outputs/comparison_summary.csv || exit 1
+
+          echo "All coefficient stability outputs verified."
+
+      # STEP 8 - Display comparison results
+      - name: Display coefficient stability summary
+        run: |
+          cat stability_outputs/comparison_summary.csv
+
+      # STEP 9 - Upload experiment results
       - name: Upload MLflow tracking results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coefficient-stability-results
+          name: dm01-coefficient-stability-results
           path: |
             mlruns/
             stability_outputs/
           if-no-files-found: warn
+          retention-days: 30
