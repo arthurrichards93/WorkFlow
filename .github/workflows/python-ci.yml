@@ -10,6 +10,7 @@ on:
 
 jobs:
 
+  # JOB 1 - DATA VALIDATION
   validate-data:
     name: 1 - Validate DM01 Data
     runs-on: ubuntu-latest
@@ -30,6 +31,7 @@ jobs:
       - name: Validate CSV files
         run: python src/validate_data.py
 
+  # JOB 2 - AUTOMATED TESTING
   run-tests:
     name: 2 - Run Automated Tests
     runs-on: ubuntu-latest
@@ -53,6 +55,7 @@ jobs:
           PYTHONPATH: .
         run: python -m pytest tests/ -v
 
+  # JOB 3 - MODEL TRAINING
   train-model:
     name: 3 - Train ML Model
     runs-on: ubuntu-latest
@@ -73,3 +76,12 @@ jobs:
 
       - name: Train model
         run: python src/train_model.py
+
+      # NEW - SAVE MODEL AND RESULTS
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dm01-model-results
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
